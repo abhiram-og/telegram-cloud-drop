@@ -1,0 +1,42 @@
+services:
+  api:
+    build: .
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    ports: ["8000:8000"]
+    restart: unless-stopped
+    depends_on: [postgres, telegram-bot-api]
+  worker:
+    build: .
+    command: uv run python -m app.worker
+    env_file: .env
+    restart: unless-stopped
+    depends_on: [postgres, telegram-bot-api]
+    volumes:
+      # Local Bot API returns absolute paths below this directory. The worker only reads it.
+      - telegram-bot-api-data:/var/lib/telegram-bot-api:ro
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_LOCAL: "1"
+    restart: unless-stopped
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://api:8000
+    profiles: [quick-tunnel]
+    depends_on: [api]
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    restart: unless-stopped
+    volumes: [postgres-data:/var/lib/postgresql/data]
+volumes:
+  postgres-data:
+  telegram-bot-api-data:
